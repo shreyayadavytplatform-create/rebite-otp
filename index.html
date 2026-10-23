@@ -1,0 +1,147 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ReBite Phone Verification</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f1efff;
+      padding: 24px;
+      color: #20264b;
+    }
+    .card {
+      max-width: 380px;
+      margin: 30px auto;
+      padding: 24px;
+      background: white;
+      border-radius: 18px;
+    }
+    input, button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    input { border: 1px solid #aaa; }
+    button {
+      background: #283b80;
+      color: white;
+      border: 0;
+    }
+    #status { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h2>ReBite</h2>
+  <p>Verify your phone number</p>
+
+  <label for="phone">Phone number with country code</label>
+  <input id="phone" type="tel" placeholder="+91XXXXXXXXXX">
+
+  <div id="recaptcha-container"></div>
+  <button id="send">Get OTP</button>
+
+  <label for="otp">Enter the SMS code</label>
+  <input id="otp" inputmode="numeric" maxlength="6"
+         placeholder="6-digit OTP">
+  <button id="verify">Verify OTP</button>
+
+  <p id="status">Phone not verified.</p>
+</div>
+
+<script type="module">
+  import { initializeApp }
+    from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+
+  import {
+    getAuth,
+    RecaptchaVerifier,
+    signInWithPhoneNumber
+  } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+
+  // Replace these placeholder values with your ReBiteWeb
+  // configuration from Firebase Project settings.
+  const firebaseConfig = {
+    apiKey: "PASTE_API_KEY",
+    authDomain: "PASTE_AUTH_DOMAIN",
+    projectId: "PASTE_PROJECT_ID",
+    appId: "PASTE_APP_ID"
+  };
+
+  const status = document.getElementById("status");
+  let confirmationResult = null;
+  let verifier = null;
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+
+  document.getElementById("send").onclick = async () => {
+    try {
+      const phone = document.getElementById("phone").value.trim();
+
+      if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+        status.textContent =
+          "Enter a valid international number, e.g. +91XXXXXXXXXX.";
+        return;
+      }
+
+      status.textContent = "Please complete the verification challenge.";
+
+      if (!verifier) {
+        verifier = new RecaptchaVerifier(
+          auth, "recaptcha-container", { size: "normal" }
+        );
+      }
+
+      await verifier.render();
+      confirmationResult =
+        await signInWithPhoneNumber(auth, phone, verifier);
+
+      status.textContent = "SMS requested. Enter the code you receive.";
+    } catch (error) {
+      status.textContent = "Could not send OTP: " + error.message;
+      if (verifier) {
+        verifier.clear();
+        verifier = null;
+      }
+    }
+  };
+
+  document.getElementById("verify").onclick = async () => {
+    try {
+      if (!confirmationResult) {
+        status.textContent = "Request an OTP first.";
+        return;
+      }
+
+      const code = document.getElementById("otp").value.trim();
+
+      if (!/^\d{6}$/.test(code)) {
+        status.textContent = "Enter the 6-digit code.";
+        return;
+      }
+
+      const result = await confirmationResult.confirm(code);
+      const phone = result.user.phoneNumber;
+
+      status.textContent = "Phone verified successfully!";
+
+      // Notify MIT App Inventor if its WebViewer bridge is available.
+      if (window.AppInventor &&
+          window.AppInventor.setWebViewString) {
+        window.AppInventor.setWebViewString(
+          "OTP_VERIFIED:" + phone
+        );
+      }
+    } catch (error) {
+      status.textContent = "Verification failed: " + error.message;
+    }
+  };
+</script>
+</body>
+</html>
